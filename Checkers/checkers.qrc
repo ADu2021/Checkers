@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/image">
+        <file>res/blueButton.png</file>
+        <file>res/redButton.png</file>
+        <file>res/whiteButton.png</file>
+        <file>res/shiningBlue.png</file>
+        <file>res/shiningRed.png</file>
+    </qresource>
+</RCC>
