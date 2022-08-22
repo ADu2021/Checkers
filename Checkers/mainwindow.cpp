@@ -64,6 +64,7 @@ MainWindow::MainWindow(QWidget *parent)
     // init timer
     timer = new QTimer(this);
     timer->setTimerType(Qt::PreciseTimer);
+    opTimer = new QTimer(this);
 
     // init label
     labelInfo = new QLabel("Not connected.", this);
@@ -106,6 +107,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this, &MainWindow::disconnectTcp, &serverThread, &ServerThread::processDisconnect);
     connect(this, &MainWindow::disconnectTcp, &socketThread, &SocketThread::processDisconnect);
     connect(timer, &QTimer::timeout, this, &MainWindow::processTimerUpdate);
+    connect(opTimer, &QTimer::timeout, this, &MainWindow::processOpTimerUpdate);
     connect(&serverThread, &ServerThread::socketDestroyed, this, &MainWindow::processSocketDestroyed);
     connect(&socketThread, &SocketThread::socketDestroyed, this, &MainWindow::processSocketDestroyed);
     connect(&socketThread, &SocketThread::disconnected, this, &MainWindow::processDisconnected);
@@ -114,7 +116,23 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    qDebug() << "~MainWindow()";
+    if(serverThread.isRunning())
+    {
+        serverThread.quit();
+        serverThread.wait();
+        qDebug() << "terminate serverThread";
+
+    }
+    if(socketThread.isRunning())
+    {
+        socketThread.quit();
+        socketThread.wait();
+        qDebug() << "terminate socketThread";
+    }
+    emit pushData(DataSet(127));
     delete ui;
+    qDebug() << "~MainWindow() ends";
 }
 
 void MainWindow::processDlClick(DrawLabel* dl){
@@ -358,8 +376,8 @@ void MainWindow::processDisconnected() {
     qDebug() << "MainWindow::processDisconnected()";
     if(status < 0)
         return;
-    setStatus(-2);
-    draw("Draw: Connection Lost.");
+    endGame();
+    draw("Connection Lost.");
 }
 
 void MainWindow::processReadyPull(){
@@ -385,6 +403,7 @@ void MainWindow::processIncomingData(DataSet dataSet){
      * 127: bye-bye (process : end thread, delete buffer, ...)
      */
     // TODO : implement me
+    opTimer->stop();
     if(dataSet.getLenData() == 0)
         return;
     int first, second = -1;
@@ -396,6 +415,7 @@ void MainWindow::processIncomingData(DataSet dataSet){
         dls[second]->setStatus(dls[first]->getStatus());
         dls[first]->setStatus(0);
         opSelected = dls[second];
+        opTimer->start(LostConnectTimeSec*1000);
    }  else if(first == 121){
         // asssert(status == 0)
         isFirst = second;
@@ -404,14 +424,16 @@ void MainWindow::processIncomingData(DataSet dataSet){
             setStatus(1);
             labelColor->setText("You = RED\nOpponent = BLUE");
             timerLcd->display(20);
-            timer->stop();
             timer->start(1000);
+            opTimer->stop();
         }
         else
         {
             setStatus(2);
             labelColor->setText("You = BLUE\nOpponent = RED");
-            timer->start(LostConnectTimeSec*1000);
+            timerLcd->display(20);
+            timer->start(1000);
+            opTimer->start(LostConnectTimeSec*1000);
         }
     } else if(first == 122){
         if(opSelected != nullptr && opSelected->getStatus() > 2)
@@ -442,7 +464,8 @@ void MainWindow::processIncomingData(DataSet dataSet){
         endGame();
     } else if(first == 127){
         // ? is this right?
-        endGame();
+        if(status >= 0)
+            processDisconnected();
     }
 }
 
@@ -472,8 +495,9 @@ void MainWindow::processStart(){
     }
     else{
         setStatus(2);
-        timer->stop();
-        timer->start(LostConnectTimeSec*1000);
+        timerLcd->display(20);
+        timer->start(1000);
+        opTimer->start(LostConnectTimeSec*1000);
         labelColor->setText("You = BLUE\nOpponent = RED");
     }
 
@@ -498,7 +522,6 @@ bool MainWindow::endTurnChk(){
     static const int MaxLeft[3] = {5,2,0};
 
     timer->stop();
-    timer->start(LostConnectTimeSec*1000);
 
     for(int i = 0; i < 10; i++)
     {
@@ -552,6 +575,9 @@ bool MainWindow::endTurnChk(){
         lcdTurn->Increase();
     }
     setStatus(2);
+    timerLcd->display(20);
+    timer->start(1000);
+    opTimer->start(LostConnectTimeSec*1000);
     return true; // return true means continue to play normally
 }
 
@@ -595,7 +621,7 @@ void MainWindow::Ilose(QString info){
 }
 void MainWindow::draw(QString info){
     endGameInfo = new QMessageBox(QMessageBox::NoIcon
-                                  , "Draw"
+                                  , "Game Ended"
                                   , info
                                   , QMessageBox::Ok
                                   , this);
@@ -605,14 +631,14 @@ void MainWindow::endGame(){
     setStatus(-2);
     timer->stop();
     timerLcd->display(0);
-
+    opTimer->stop();
 }
 void MainWindow::processSocketDestroyed() {
     emit disconnectTcp();
     if(serverThread.isRunning())
         serverThread.exit();
     if(socketThread.isRunning())
-        serverThread.exit();
+        socketThread.exit();
 }
 void MainWindow::startTurn() {
     if(isFirst)
@@ -625,12 +651,10 @@ void MainWindow::startTurn() {
     timer->stop();
     timer->start(1000);
 
-
 }
 void MainWindow::processTimerUpdate(){
-    if(status == 2){ // lost connection
-        processDisconnected();
-        endGame();
+    if(status == 2 && timerLcd->value() == 0){ // in case there is a delay
+        return;
     }
     timerLcd->Increase();
     if(timerLcd->value() > 0)
@@ -642,6 +666,12 @@ void MainWindow::processTimerUpdate(){
             selected->setStatus(selected->getStatus()-2);
         if(endTurnChk())
             emit pushData(DataSet(122));
+    }
+}
+void MainWindow::processOpTimerUpdate() {
+    if(status == 2){ // lost connection
+        processDisconnected();
+        endGame();
     }
 }
 

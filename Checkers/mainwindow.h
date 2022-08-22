@@ -42,6 +42,7 @@ public slots:
     void processReadyPull();
     void processIncomingData(DataSet dataSet); // handle incoming data from thread
     void processTimerUpdate();
+    void processOpTimerUpdate();
 
     void processSocketDestroyed();
 
@@ -97,6 +98,7 @@ private:
     int turn = 1;
 
     QTimer *timer = nullptr;
+    QTimer *opTimer = nullptr;
     IncLCDNumber *timerLcd = nullptr;
     int timeoutCnt = 0;
 
@@ -126,7 +128,7 @@ private:
 
     Ui::MainWindow *ui;
 
-    static const int LostConnectTimeSec = 60;
+    static const int LostConnectTimeSec = 30;
 
 };
 #endif // MAINWINDOW_H

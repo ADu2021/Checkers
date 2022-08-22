@@ -81,7 +81,8 @@ inline void DrawLabel::paintEvent(QPaintEvent *event){
 
 inline void DrawLabel::mouseReleaseEvent(QMouseEvent *event){
     // note that the logic of the game should not be processed by DrawLabel (here).
-    emit Clicked(this);
+    if(event->button() == Qt::LeftButton)
+        emit Clicked(this);
 
 }
 
